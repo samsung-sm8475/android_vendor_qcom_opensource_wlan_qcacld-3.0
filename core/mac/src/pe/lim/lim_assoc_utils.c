@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -709,8 +709,8 @@ lim_reject_association(struct mac_context *mac_ctx, tSirMacAddr peer_addr,
 				STATUS_AP_UNABLE_TO_HANDLE_NEW_STA,
 				1, peer_addr, sub_type, sta_ds, session_entry,
 				false);
-		pe_debug("Received Re/Assoc req when max associated STAs reached from " QDF_MAC_ADDR_FMT,
-			 QDF_MAC_ADDR_REF(peer_addr));
+		pe_warn("received Re/Assoc req when max associated STAs reached from");
+		lim_print_mac_addr(mac_ctx, peer_addr, LOGW);
 		lim_send_sme_max_assoc_exceeded_ntf(mac_ctx, peer_addr,
 					session_entry->smeSessionId);
 		return;
@@ -1867,7 +1867,7 @@ QDF_STATUS lim_populate_matching_rate_set(struct mac_context *mac_ctx,
 					  tDot11fIEeht_cap *eht_caps)
 {
 	tSirMacRateSet temp_rate_set;
-	tSirMacRateSet temp_rate_set2 = {0};
+	tSirMacRateSet temp_rate_set2;
 	uint32_t i, j, val, min, is_arate;
 	uint32_t phy_mode;
 	uint8_t mcs_set[SIZE_OF_SUPPORTED_MCS_SET];
@@ -1891,6 +1891,8 @@ QDF_STATUS lim_populate_matching_rate_set(struct mac_context *mac_ctx,
 			     session_entry->extRateSet.numRates);
 		temp_rate_set2.numRates =
 			(uint8_t) session_entry->extRateSet.numRates;
+	} else {
+		temp_rate_set2.numRates = 0;
 	}
 
 	lim_remove_membership_selectors(&temp_rate_set);

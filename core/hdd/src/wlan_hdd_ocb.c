@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -427,6 +426,7 @@ static int hdd_ocb_set_config_req(struct hdd_adapter *adapter,
 					WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
 					WLAN_CONTROL_PATH);
 
+	/* fall through */
 end:
 	osif_request_put(request);
 
@@ -779,11 +779,6 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 
 	hdd_enter_dev(dev);
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
-
 	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
 
@@ -984,11 +979,6 @@ static int __wlan_hdd_cfg80211_ocb_set_utc_time(struct wiphy *wiphy,
 
 	hdd_enter_dev(dev);
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
-
 	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
 
@@ -1114,11 +1104,6 @@ __wlan_hdd_cfg80211_ocb_start_timing_advert(struct wiphy *wiphy,
 	int rc = -EINVAL;
 
 	hdd_enter_dev(dev);
-
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
 
 	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
@@ -1248,11 +1233,6 @@ __wlan_hdd_cfg80211_ocb_stop_timing_advert(struct wiphy *wiphy,
 	int rc = -EINVAL;
 
 	hdd_enter_dev(dev);
-
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
 
 	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
@@ -1447,11 +1427,6 @@ __wlan_hdd_cfg80211_ocb_get_tsf_timer(struct wiphy *wiphy,
 
 	hdd_enter_dev(dev);
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
-
 	rc = wlan_hdd_validate_context(hdd_ctx);
 	if (rc)
 		return rc;
@@ -1514,6 +1489,7 @@ __wlan_hdd_cfg80211_ocb_get_tsf_timer(struct wiphy *wiphy,
 		goto end;
 	}
 
+	/* fall through */
 end:
 	osif_request_put(request);
 
@@ -1687,11 +1663,6 @@ static int __wlan_hdd_cfg80211_dcc_get_stats(struct wiphy *wiphy,
 
 	hdd_enter_dev(dev);
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
-
 	rc = wlan_hdd_validate_context(hdd_ctx);
 	if (rc)
 		return rc;
@@ -1783,6 +1754,7 @@ static int __wlan_hdd_cfg80211_dcc_get_stats(struct wiphy *wiphy,
 		goto end;
 	}
 
+	/* fall through */
 end:
 	osif_request_put(request);
 
@@ -1838,11 +1810,6 @@ static int __wlan_hdd_cfg80211_dcc_clear_stats(struct wiphy *wiphy,
 	struct wlan_objmgr_vdev *vdev;
 
 	hdd_enter_dev(dev);
-
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
 
 	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
@@ -1987,11 +1954,6 @@ static int __wlan_hdd_cfg80211_dcc_update_ndl(struct wiphy *wiphy,
 
 	hdd_enter_dev(dev);
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
-		return -EPERM;
-	}
-
 	rc = wlan_hdd_validate_context(hdd_ctx);
 	if (rc)
 		return rc;
@@ -2084,6 +2046,7 @@ static int __wlan_hdd_cfg80211_dcc_update_ndl(struct wiphy *wiphy,
 		goto end;
 	}
 
+	/* fall through */
 end:
 	osif_request_put(request);
 

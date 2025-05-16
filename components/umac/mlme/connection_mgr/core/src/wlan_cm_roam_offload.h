@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -130,6 +130,23 @@ cm_roam_state_change(struct wlan_objmgr_pdev *pdev,
 		     uint8_t vdev_id,
 		     enum roam_offload_state requested_state,
 		     uint8_t reason, bool *send_resp, bool start_timer);
+
+/**
+ * cm_handle_sta_sta_roaming_enablement() - To handle roaming in case
+ * of STA + STA
+ * @psoc: psoc common object
+ * @curr_vdev_id: Vdev id
+ *
+ * This function is to process STA + STA concurrency scenarios after roaming
+ * and take care of following:
+ * 1. Set PCL to vdev/pdev as per DBS, SCC or MCC
+ * 2. Enable/disable roaming based on the concurrency (DBS vs SCC/MCC) after
+ * roaming
+ *
+ * Return: none
+ */
+void cm_handle_sta_sta_roaming_enablement(struct wlan_objmgr_psoc *psoc,
+					  uint8_t curr_vdev_id);
 
 /**
  * cm_handle_sta_sta_roaming_enablement() - To handle roaming in case
@@ -283,12 +300,10 @@ QDF_STATUS cm_roam_control_restore_default_config(struct wlan_objmgr_pdev *pdev,
  * cm_update_pmk_cache_ft - API to update MDID in PMKSA cache entry
  * @psoc: psoc pointer
  * @vdev_id: dvev ID
- * @pmk_cache: pmksa from the userspace
  *
  * Return: None
  */
-void cm_update_pmk_cache_ft(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
-			    struct wlan_crypto_pmksa *pmk_cache);
+void cm_update_pmk_cache_ft(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id);
 
 /**
  * cm_lookup_pmkid_using_bssid() - lookup pmkid using bssid
@@ -329,87 +344,10 @@ cm_roam_send_disable_config(struct wlan_objmgr_psoc *psoc,
 QDF_STATUS
 cm_roam_send_rt_stats_config(struct wlan_objmgr_psoc *psoc,
 			     uint8_t vdev_id, uint8_t param_value);
-
-/**
- * cm_roam_send_ho_delay_config() - Send HO delay value to FW to delay
- * hand-off (in msec) by the specified duration to receive pending rx frames
- * from current BSS.
- * @psoc: PSOC pointer
- * @vdev_id: vdev id
- * @param_value: HO delay value
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-cm_roam_send_ho_delay_config(struct wlan_objmgr_psoc *psoc,
-			     uint8_t vdev_id, uint16_t param_value);
-
-/**
- * cm_exclude_rm_partial_scan_freq() - Exclude the channels in roam full scan
- * that are already scanned as part of partial scan.
- * @psoc: PSOC pointer
- * @vdev_id: vdev id
- * @param_value: include/exclude the partial scan channels in roam full scan
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-cm_exclude_rm_partial_scan_freq(struct wlan_objmgr_psoc *psoc,
-				uint8_t vdev_id, uint8_t param_value);
-
-/**
- * cm_roam_full_scan_6ghz_on_disc() - Include the 6 GHz channels in roam full
- * scan only on prior discovery of any 6 GHz support in the environment
- * @psoc: PSOC pointer
- * @vdev_id: vdev id
- * @param_value: Include the 6 GHz channels in roam full scan:
- * 1 - Include only on prior discovery of any 6 GHz support in the environment
- * 0 - Include all the supported 6 GHz channels by default
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS cm_roam_full_scan_6ghz_on_disc(struct wlan_objmgr_psoc *psoc,
-					  uint8_t vdev_id, uint8_t param_value);
-
-/**
- * cm_set_roam_scan_high_rssi_offset() - Set the delta change in high RSSI at
- * which roam scan is triggered in 2.4/5 GHz.
- * @psoc: PSOC pointer
- * @vdev_id: vdev id
- * @param_value: Set the High RSSI delta for roam scan trigger
- * * 1-16 - Set an offset value in this range
- * * 0    - Disable
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-cm_set_roam_scan_high_rssi_offset(struct wlan_objmgr_psoc *psoc,
-				  uint8_t vdev_id, uint8_t param_value);
 #else
 static inline QDF_STATUS
 cm_roam_send_rt_stats_config(struct wlan_objmgr_psoc *psoc,
 			     uint8_t vdev_id, uint8_t param_value)
-{
-	return QDF_STATUS_E_NOSUPPORT;
-}
-
-static inline QDF_STATUS
-cm_roam_send_ho_delay_config(struct wlan_objmgr_psoc *psoc,
-			     uint8_t vdev_id, uint16_t param_value)
-{
-	return QDF_STATUS_E_NOSUPPORT;
-}
-
-static inline QDF_STATUS
-cm_exclude_rm_partial_scan_freq(struct wlan_objmgr_psoc *psoc,
-				uint8_t vdev_id, uint8_t param_value)
-{
-	return QDF_STATUS_E_NOSUPPORT;
-}
-
-static inline
-QDF_STATUS cm_roam_full_scan_6ghz_on_disc(struct wlan_objmgr_psoc *psoc,
-					  uint8_t vdev_id, uint8_t param_value)
 {
 	return QDF_STATUS_E_NOSUPPORT;
 }

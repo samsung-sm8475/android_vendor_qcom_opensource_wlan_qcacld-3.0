@@ -78,7 +78,7 @@ struct mac_context;
 
 typedef uint8_t tSirIpv4Addr[QDF_IPV4_ADDR_SIZE];
 
-#define SIR_VERSION_STRING_LEN 1024
+#define SIR_VERSION_STRING_LEN 64
 typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 
 /* Periodic Tx pattern offload feature */
@@ -126,10 +126,6 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 
 #define SIR_KEK_KEY_LEN 16
 #define SIR_KEK_KEY_LEN_FILS 64
-
-#define SIR_FILS_HLP_OUI_TYPE  "\x5"
-#define SIR_FILS_HLP_OUI_LEN   1
-#define SIR_FILS_HLP_IE_LEN    2048
 
 #define SIR_REPLAY_CTR_LEN 8
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD

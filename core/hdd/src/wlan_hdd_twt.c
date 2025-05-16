@@ -260,9 +260,6 @@ static int hdd_twt_configure(struct hdd_adapter *adapter,
 		ret = osif_twt_clear_session_traffic_stats(vdev,
 							   twt_param_attr);
 		break;
-	case QCA_WLAN_TWT_SET_PARAM:
-		ret = osif_twt_set_param(vdev, twt_param_attr);
-		break;
 	default:
 		hdd_err("Invalid TWT Operation");
 		ret = -EINVAL;
@@ -2066,6 +2063,13 @@ static int hdd_twt_setup_session(struct hdd_adapter *adapter,
 	if (ret)
 		return ret;
 
+	if (!ucfg_mlme_get_twt_peer_responder_capabilities(
+					adapter->hdd_ctx->psoc,
+					&hdd_sta_ctx->conn_info.bssid)) {
+		hdd_err_rl("TWT setup reject: TWT responder not supported");
+		return -EOPNOTSUPP;
+	}
+
 	ret = hdd_twt_get_add_dialog_values(tb2, &params);
 	if (ret)
 		return ret;
@@ -2578,6 +2582,13 @@ static int hdd_sta_twt_terminate_session(struct hdd_adapter *adapter,
 	if (!ucfg_mlme_is_twt_setup_done(adapter->hdd_ctx->psoc,
 					 &hdd_sta_ctx->conn_info.bssid,
 					 params.dialog_id)) {
+#ifdef SEC_CONFIG_TWT
+// case 05405528 - return OKAY only when dialog_id is ALL but no active TWT session
+		if(params.dialog_id == TWT_ALL_SESSIONS_DIALOG_ID) {
+			hdd_debug("no active session to clean up, return okay");
+			return 0;
+		}
+#endif
 		hdd_debug("vdev%d: TWT session %d setup incomplete",
 			  params.vdev_id, params.dialog_id);
 		return -EAGAIN;
@@ -4660,8 +4671,6 @@ void __hdd_twt_update_work_handler(struct hdd_context *hdd_ctx)
 	hdd_debug("Total connection %d, sta_count %d, sap_count %d",
 		  num_connections, sta_count, sap_count);
 	switch (num_connections) {
-	case 0:
-		break;
 	case 1:
 		if (sta_count == 1) {
 			hdd_send_twt_requestor_enable_cmd(hdd_ctx);
@@ -4734,7 +4743,7 @@ void __hdd_twt_update_work_handler(struct hdd_context *hdd_ctx)
 		}
 		break;
 	default:
-		hdd_debug("Unexpected number of connection");
+		hdd_err("Unexpected number of connection");
 		break;
 	}
 }

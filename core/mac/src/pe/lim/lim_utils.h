@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -185,6 +185,8 @@ uint8_t lim_get_max_tx_power(struct mac_context *mac,
  * lim_calculate_tpc() - Utility to get maximum tx power
  * @mac: mac handle
  * @session: PE Session Entry
+ * @is_pwr_constraint_absolute: If local power constraint is an absolute
+ * value or an offset value.
  * @ap_pwr_type: Ap power type for 6G
  * @ctry_code_match: check for country IE and sta programmed ctry match
  *
@@ -195,6 +197,7 @@ uint8_t lim_get_max_tx_power(struct mac_context *mac,
  */
 void lim_calculate_tpc(struct mac_context *mac,
 		       struct pe_session *session,
+		       bool is_pwr_constraint_absolute,
 		       uint8_t ap_pwr_type,
 		       bool ctry_code_match);
 
@@ -2827,31 +2830,6 @@ bool lim_update_channel_width(struct mac_context *mac_ctx,
 uint8_t lim_get_vht_ch_width(tDot11fIEVHTCaps *vht_cap,
 			     tDot11fIEVHTOperation *vht_op,
 			     tDot11fIEHTInfo *ht_info);
-
-/**
- * lim_is_self_and_peer_ocv_capable() - check whether OCV capable
- * @mac:        pointer to mac data
- * @pe_session: pointer to pe session
-.* @peer:       peer mac address
- *
- * Return: true if both self and peer ocv capable
- */
-bool
-lim_is_self_and_peer_ocv_capable(struct mac_context *mac,
-				 uint8_t *peer,
-				 struct pe_session *pe_session);
-
-/**
- * lim_fill_oci_params() - fill oci parameters
- * @mac:        pointer to mac data
- * @session: pointer to pe session
-.* @oci:       pointer of tDot11fIEoci
- *
- * Return: void
- */
-void
-lim_fill_oci_params(struct mac_context *mac, struct pe_session *session,
-		    tDot11fIEoci *oci);
 
 /**
  * lim_update_tx_power() - Function to update the TX power for

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1287,10 +1287,8 @@ enum qdisc_filter_status {
  * @delete_in_progress: Flag to indicate that the adapter delete is in
  *			progress, and any operation using rtnl lock inside
  *			the driver can be avoided/skipped.
- * @is_virtual_iface: Indicates that netdev is called from virtual interface
  * @mon_adapter: hdd_adapter of monitor mode.
  * @set_mac_addr_req_ctx: Set MAC address command request context
- * @delta_qtime: delta between host qtime and monotonic time
  */
 struct hdd_adapter {
 	/* Magic cookie for adapter sanity verification.  Note that this
@@ -1381,6 +1379,8 @@ struct hdd_adapter {
 	struct completion offchannel_tx_event;
 	/* Completion variable for action frame */
 	struct completion tx_action_cnf_event;
+
+	struct completion sta_authorized_event;
 
 	/* Track whether the linkup handling is needed  */
 	bool is_link_up_service_needed;
@@ -1552,7 +1552,7 @@ struct hdd_adapter {
 	uint32_t pkt_type_bitmap;
 	uint32_t track_arp_ip;
 	uint8_t dns_payload[256];
-	uint8_t track_dns_domain_len;
+	uint32_t track_dns_domain_len;
 	uint32_t track_src_port;
 	uint32_t track_dest_port;
 	uint32_t track_dest_ipv4;
@@ -1616,7 +1616,6 @@ struct hdd_adapter {
 	/* Flag to indicate whether it is a pre cac adapter or not */
 	bool is_pre_cac_adapter;
 	bool delete_in_progress;
-	bool is_virtual_iface;
 #ifdef WLAN_FEATURE_BIG_DATA_STATS
 	struct big_data_stats_event big_data_stats;
 #endif
@@ -1629,7 +1628,6 @@ struct hdd_adapter {
 #ifdef WLAN_FEATURE_DYNAMIC_MAC_ADDR_UPDATE
 	void *set_mac_addr_req_ctx;
 #endif
-	int64_t delta_qtime;
 };
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(adapter) (&(adapter)->session.station)
@@ -1985,8 +1983,6 @@ struct hdd_rtpm_tput_policy_context {
 };
 #endif
 
-#define MAX_TGT_HW_NAME_LEN 32
-
 /**
  * struct hdd_context - hdd shared driver and psoc/device context
  * @psoc: object manager psoc context
@@ -2012,12 +2008,6 @@ struct hdd_rtpm_tput_policy_context {
  * @is_therm_cmd_supp: get temperature command enable or disable
  * @disconnect_for_sta_mon_conc: disconnect if sta monitor intf concurrency
  * @bbm_ctx: bus bandwidth manager context
- * @is_dual_mac_cfg_updated: indicate whether dual mac cfg has been updated
- * @twt_en_dis_work: work to send twt enable/disable cmd on MCC/SCC concurrency
- * @dump_in_progress: Stores value of dump in progress
- * @hdd_dual_sta_policy: Concurrent STA policy configuration
- * @last_pagefault_ssr_time: Time when last recovery was triggered because of
- * @host wakeup from fw with reason as pagefault
  */
 struct hdd_context {
 	struct wlan_objmgr_psoc *psoc;
@@ -2129,7 +2119,7 @@ struct hdd_context {
 	/* defining the chip/rom revision */
 	uint32_t target_hw_revision;
 	/* chip/rom name */
-	char target_hw_name[MAX_TGT_HW_NAME_LEN];
+	char *target_hw_name;
 	struct regulatory reg;
 #ifdef FEATURE_WLAN_CH_AVOID
 	uint16_t unsafe_channel_count;
@@ -2373,31 +2363,29 @@ struct hdd_context {
 #ifdef FEATURE_BUS_BANDWIDTH_MGR
 	struct bbm_context *bbm_ctx;
 #endif
-	bool is_dual_mac_cfg_updated;
-	bool is_regulatory_update_in_progress;
-	qdf_event_t regulatory_update_event;
-	qdf_mutex_t regulatory_status_lock;
-	bool is_fw_dbg_log_levels_configured;
+    bool is_regulatory_update_in_progress;
+    qdf_event_t regulatory_update_event;
+    qdf_mutex_t regulatory_status_lock;
+    bool is_fw_dbg_log_levels_configured;
 #ifdef WLAN_SUPPORT_TWT
-	qdf_work_t twt_en_dis_work;
+    qdf_work_t twt_en_dis_work;
 #endif
-	bool is_wifi3_0_target;
-	bool dump_in_progress;
-	uint64_t bw_vote_time;
-	struct hdd_dual_sta_policy dual_sta_policy;
+    bool is_wifi3_0_target;
+    bool dump_in_progress;
+    uint64_t bw_vote_time;
+    struct hdd_dual_sta_policy dual_sta_policy;
 #if defined(WLAN_FEATURE_11BE_MLO) && defined(CFG80211_11BE_BASIC)
-	struct hdd_mld_mac_info mld_mac_info;
+    struct hdd_mld_mac_info mld_mac_info;
 #endif
 #ifdef THERMAL_STATS_SUPPORT
-	bool is_therm_stats_in_progress;
+    bool is_therm_stats_in_progress;
 #endif
 #ifdef WLAN_FEATURE_DYNAMIC_MAC_ADDR_UPDATE
-	bool is_vdev_macaddr_dynamic_update_supported;
+    bool is_vdev_macaddr_dynamic_update_supported;
 #endif
 #ifdef CONFIG_WLAN_FREQ_LIST
-	uint8_t power_type;
+    uint8_t power_type;
 #endif
-	qdf_time_t last_pagefault_ssr_time;
 };
 
 /**
@@ -2490,7 +2478,9 @@ struct hdd_chwidth_info {
 /*
  * Function declarations and documentation
  */
-
+#ifdef SEC_CONFIG_PSM_SYSFS
+int wlan_hdd_sec_get_psm(void);
+#endif /* SEC_CONFIG_PSM_SYSFS */
 /**
  * wlan_hdd_history_get_next_index() - get next index to store the history
 				       entry
@@ -2697,19 +2687,6 @@ void hdd_adapter_dev_put_debug(struct hdd_adapter *adapter,
 			       wlan_net_dev_ref_dbgid dbgid);
 
 /**
- * hdd_validate_next_adapter - API to check for infinite loop
- *                             in the adapter list traversal
- * @curr: current adapter pointer
- * @next: next adapter pointer
- * @dbg_id: Debug ID corresponding to API that is requesting the dev_put
- *
- * Return: None
- */
-void hdd_validate_next_adapter(struct hdd_adapter **curr,
-			       struct hdd_adapter **next,
-			       wlan_net_dev_ref_dbgid dbg_id);
-
-/**
  * __hdd_take_ref_and_fetch_front_adapter_safe - Helper macro to lock, fetch
  * front and next adapters, take ref and unlock.
  * @hdd_ctx: the global HDD context
@@ -2740,7 +2717,6 @@ void hdd_validate_next_adapter(struct hdd_adapter **curr,
 	qdf_spin_lock_bh(&hdd_ctx->hdd_adapter_lock), \
 	adapter = next_adapter, \
 	hdd_get_next_adapter_no_lock(hdd_ctx, adapter, &next_adapter), \
-	hdd_validate_next_adapter(&adapter, &next_adapter, dbgid), \
 	(next_adapter) ? hdd_adapter_dev_hold_debug(next_adapter, dbgid) : \
 			 (false), \
 	qdf_spin_unlock_bh(&hdd_ctx->hdd_adapter_lock)
@@ -5052,6 +5028,8 @@ static inline bool hdd_nbuf_dst_addr_is_self_addr(struct hdd_adapter *adapter,
 				    QDF_NBUF_DEST_MAC_OFFSET);
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)) && \
+     defined(WLAN_FEATURE_11AX)
 /**
  * hdd_cleanup_conn_info() - Cleanup connectin info
  * @adapter: Adapter upon which the command was received
@@ -5062,6 +5040,23 @@ static inline bool hdd_nbuf_dst_addr_is_self_addr(struct hdd_adapter *adapter,
  * Return: none
  */
 void hdd_cleanup_conn_info(struct hdd_adapter *adapter);
+/**
+ * hdd_sta_destroy_ctx_all() - cleanup all station contexts
+ * @hdd_ctx: Global HDD context
+ *
+ * This function destroys all the station contexts
+ *
+ * Return: none
+ */
+void hdd_sta_destroy_ctx_all(struct hdd_context *hdd_ctx);
+#else
+static inline void hdd_cleanup_conn_info(struct hdd_adapter *adapter)
+{
+}
+static inline void hdd_sta_destroy_ctx_all(struct hdd_context *hdd_ctx)
+{
+}
+#endif
 
 #ifdef FEATURE_WLAN_RESIDENT_DRIVER
 extern char *country_code;

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -260,43 +260,6 @@ QDF_STATUS wlan_mlme_set_ht_mpdu_density(struct wlan_objmgr_psoc *psoc,
  */
 QDF_STATUS wlan_mlme_get_band_capability(struct wlan_objmgr_psoc *psoc,
 					 uint32_t *band_capability);
-
-#ifdef MULTI_CLIENT_LL_SUPPORT
-/**
- * wlan_mlme_get_wlm_multi_client_ll_caps() - Get the wlm multi client latency
- * level capability flag
- * @psoc: pointer to psoc object
- *
- * Return: True is multi client ll cap present
- */
-bool wlan_mlme_get_wlm_multi_client_ll_caps(struct wlan_objmgr_psoc *psoc);
-#else
-static inline bool
-wlan_mlme_get_wlm_multi_client_ll_caps(struct wlan_objmgr_psoc *psoc)
-{
-	return false;
-}
-#endif
-
-#ifdef FEATURE_WLAN_CH_AVOID_EXT
-/**
- * wlan_mlme_get_coex_unsafe_chan_nb_user_prefer() - get coex unsafe nb
- * support
- * @psoc:   pointer to psoc object
- * @value:  pointer to the value which will be filled for the caller
- *
- * Return: coex_unsafe_chan_nb_user_prefer
- */
-bool wlan_mlme_get_coex_unsafe_chan_nb_user_prefer(
-		struct wlan_objmgr_psoc *psoc);
-#else
-static inline
-bool wlan_mlme_get_coex_unsafe_chan_nb_user_prefer(
-		struct wlan_objmgr_psoc *psoc)
-{
-	return false;
-}
-#endif
 
 /**
  * wlan_mlme_set_band_capability() - Set the Band capability config
@@ -1123,21 +1086,6 @@ QDF_STATUS wlan_mlme_set_primary_interface(struct wlan_objmgr_psoc *psoc,
  * Return: QDF Status
  */
 QDF_STATUS wlan_mlme_set_default_primary_iface(struct wlan_objmgr_psoc *psoc);
-
-/**
- * wlan_mlme_peer_get_assoc_rsp_ies() - Get the assoc response IEs of peer
- * @peer: WLAN peer objmgr
- * @ie_buf: Pointer to IE buffer
- * @ie_len: Length of the IE buffer
- *
- * Get the pointer to assoc response IEs of the peer from MLME
- * and length of the IE buffer.
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS wlan_mlme_peer_get_assoc_rsp_ies(struct wlan_objmgr_peer *peer,
-					    const uint8_t **ie_buf,
-					    size_t *ie_len);
 
 /**
  * wlan_mlme_get_mcc_duty_cycle_percentage() - Get primary STA iface duty
@@ -2726,18 +2674,6 @@ wlan_mlme_get_mgmt_max_retry(struct wlan_objmgr_psoc *psoc,
 			     uint8_t *max_retry);
 
 /**
- * wlan_mlme_get_mgmt_6ghz_rate_support() - Get status of HE rates for
- * 6GHz mgmt frames
- * @psoc: pointer to psoc object
- * @enable_he_mcs0_for_6ghz_mgmt: pointer to check for HE rates support
- *
- * Return: QDF Status
- */
-QDF_STATUS
-wlan_mlme_get_mgmt_6ghz_rate_support(struct wlan_objmgr_psoc *psoc,
-				     bool *enable_he_mcs0_for_6ghz_mgmt);
-
-/**
  * wlan_mlme_get_status_ring_buffer() - Get the
  * status of ring buffer
  * @psoc: pointer to psoc object
@@ -3542,6 +3478,29 @@ wlan_mlme_get_channel_bonding_5ghz(struct wlan_objmgr_psoc *psoc,
 				   uint32_t *value);
 
 /**
+ * wlan_mlme_set_safe_mode_enable() - set safe_mode_enable flag
+ * based on value set by user space.
+ *
+ * @psoc: psoc context
+ * @safe_mode_enable: safe mode enabled or not
+ *
+ * Return: none
+ */
+void wlan_mlme_set_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
+                                   bool safe_mode_enable);
+
+/**
+ * wlan_mlme_get_safe_mode_enable() - get safe_mode_enable set by user
+ * space
+ *
+ * @psoc: psoc context
+ * @safe_mode_enable: safe mode enabled or not
+ *
+ * Return: none
+ */
+void wlan_mlme_get_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
+                                    bool *safe_mode_enable);
+/**
  * wlan_mlme_update_ratemask_params() - Update ratemask params
  *
  * @vdev: pointer to vdev object
@@ -3554,44 +3513,6 @@ QDF_STATUS
 wlan_mlme_update_ratemask_params(struct wlan_objmgr_vdev *vdev,
 				 uint8_t num_ratemask,
 				 struct config_ratemask_params *rate_params);
-
-/**
- * wlan_mlme_set_safe_mode_enable() - set safe_mode_enable flag
- * based on value set by user space.
- *
- * @psoc: psoc context
- * @safe_mode_enable: safe mode enabled or not
- *
- * Return: none
- */
-void wlan_mlme_set_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
-				    bool safe_mode_enable);
-
-/**
- * wlan_mlme_get_safe_mode_enable() - get safe_mode_enable set by user
- * space
- *
- * @psoc: psoc context
- * @safe_mode_enable: safe mode enabled or not
- *
- * Return: none
- */
-void wlan_mlme_get_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
-				    bool *safe_mode_enable);
-/**
- * wlan_mlme_get_6g_ap_power_type() - get the power type of the
- * vdev operating on 6GHz.
- *
- * @vdev: vdev context
- *
- * Return: 6g_power_type
- */
-uint32_t wlan_mlme_get_6g_ap_power_type(struct wlan_objmgr_vdev *vdev);
-
-QDF_STATUS wlan_connect_hw_mode_change_resp(struct wlan_objmgr_pdev *pdev,
-					    uint8_t vdev_id,
-					    wlan_cm_id cm_id,
-					    QDF_STATUS status);
 
 /**
  * wlan_mlme_get_ch_width_from_phymode() - Convert phymode to ch_width
@@ -3611,4 +3532,14 @@ wlan_mlme_get_ch_width_from_phymode(enum wlan_phymode phy_mode);
  */
 enum phy_ch_width
 wlan_mlme_get_peer_ch_width(struct wlan_objmgr_psoc *psoc, uint8_t *mac);
+
+/**
+ * wlan_mlme_get_6g_ap_power_type() - get the power type of the
+ * vdev operating on 6GHz.
+ *
+ * @vdev: vdev context
+ *
+ * Return: 6g_power_type
+ */
+uint32_t wlan_mlme_get_6g_ap_power_type(struct wlan_objmgr_vdev *vdev);
 #endif /* _WLAN_MLME_API_H_ */

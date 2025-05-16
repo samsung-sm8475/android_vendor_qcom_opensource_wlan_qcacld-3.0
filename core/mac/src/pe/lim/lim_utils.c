@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1104,8 +1104,10 @@ lim_decide_ap_protection(struct mac_context *mac, tSirMacAddr peerMacAddr,
 	sta =
 		dph_lookup_hash_entry(mac, peerMacAddr, &tmpAid,
 				      &pe_session->dph.dphHashTable);
-	if (!sta)
+	if (!sta) {
+		pe_err("sta is NULL");
 		return;
+	}
 	lim_get_rf_band_new(mac, &rfBand, pe_session);
 	/* if we are in 5 GHZ band */
 	if (REG_BAND_5G == rfBand) {
@@ -1874,16 +1876,17 @@ static void __lim_process_channel_switch_timeout(struct pe_session *pe_session)
 		}
 
 		/*
-		 * The channel switch request received from AP is carrying
-		 * invalid channel. It's ok to ignore this channel switch
-		 * request as it might be from spoof AP. If it's from genuine
-		 * AP, it may lead to heart beat failure and result in
-		 * disconnection. DUT can go ahead and reconnect to it/any
-		 * other AP once it disconnects.
+		 * If the channel-list that AP is asking us to switch is invalid
+		 * then we cannot switch the channel. Just disassociate from AP.
+		 * We will find a better AP !!!
 		 */
-		pe_err("Invalid channel freq %u Ignore CSA request",
-		       channel_freq);
-		return;
+		if (lim_is_sb_disconnect_allowed(pe_session)) {
+			pe_err("Invalid channel! Disconnect");
+			lim_tear_down_link_with_ap(mac, pe_session->peSessionId,
+					   REASON_UNSUPPORTED_CHANNEL_CSA,
+					   eLIM_LINK_MONITORING_DISASSOC);
+			return;
+		}
 	}
 	switch (pe_session->gLimChannelSwitch.state) {
 	case eLIM_CHANNEL_SWITCH_PRIMARY_ONLY:
@@ -3774,17 +3777,11 @@ void lim_update_sta_run_time_ht_switch_chnl_params(struct mac_context *mac,
 						   struct pe_session *pe_session)
 {
 	qdf_freq_t chan_freq;
-	uint32_t self_cb_mode = mac->roam.configParam.channelBondingMode5GHz;
-
-	if (WLAN_REG_IS_24GHZ_CH_FREQ(pe_session->curr_op_freq))
-		self_cb_mode = mac->roam.configParam.channelBondingMode24GHz;
 
 	/* If self capability is set to '20Mhz only', then do not change the CB mode. */
-	if (self_cb_mode == WNI_CFG_CHANNEL_BONDING_MODE_DISABLE) {
-		pe_debug("self_cb_mode 0 for freq %d",
-			 pe_session->curr_op_freq);
+	if (!lim_get_ht_capability
+		    (mac, eHT_SUPPORTED_CHANNEL_WIDTH_SET, pe_session))
 		return;
-	}
 
 	if (wlan_reg_is_24ghz_ch_freq(pe_session->curr_op_freq) &&
 	    pe_session->force_24ghz_in_ht20) {
@@ -3804,8 +3801,8 @@ void lim_update_sta_run_time_ht_switch_chnl_params(struct mac_context *mac,
 	chan_freq = wlan_reg_legacy_chan_to_freq(mac->pdev,
 						 pHTInfo->primaryChannel);
 
-	if (reg_is_chan_enum_invalid(
-				wlan_reg_get_chan_enum_for_freq(chan_freq))) {
+	if (wlan_reg_get_chan_enum_for_freq(chan_freq) ==
+	    INVALID_CHANNEL) {
 		pe_debug("Ignore Invalid channel in HT info");
 		return;
 	}
@@ -4886,14 +4883,13 @@ void pe_set_resume_channel(struct mac_context *mac, uint16_t channel,
 bool lim_isconnected_on_dfs_freq(struct mac_context *mac_ctx,
 				 qdf_freq_t oper_freq)
 {
-	/* Indoor channels are also marked DFS, therefore
-	 * check if the channel has REGULATORY_CHAN_RADAR
-	 * channel flag to identify if the channel is DFS
-	 */
-	if (wlan_reg_is_dfs_for_freq(mac_ctx->pdev, oper_freq))
+	if (CHANNEL_STATE_DFS ==
+	    wlan_reg_get_channel_state_for_freq(mac_ctx->pdev,
+						oper_freq)) {
 		return true;
-	else
+	} else {
 		return false;
+	}
 }
 
 void lim_pmf_sa_query_timer_handler(void *pMacGlobal, uint32_t param)
@@ -6356,7 +6352,7 @@ void lim_merge_extcap_struct(tDot11fIEExtCap *dst,
 
 	pe_debug("source extended capabilities length:%d", src->num_bytes);
 	QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_DEBUG,
-			   src->bytes, src->num_bytes);
+			   src, src->num_bytes);
 
 	/* Return if strip the capabilities from @dst which not present */
 	if (!dst->present && !add)
@@ -6379,7 +6375,7 @@ void lim_merge_extcap_struct(tDot11fIEExtCap *dst,
 		pe_debug("destination extended capabilities length: %d",
 			 dst->num_bytes);
 		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_DEBUG,
-				   dst->bytes, dst->num_bytes);
+				   dst, dst->num_bytes);
 	}
 }
 
@@ -8141,11 +8137,11 @@ QDF_STATUS lim_send_mlo_caps_ie(struct mac_context *mac_ctx,
 
 	status_2g = lim_send_ie(mac_ctx, vdev_id, DOT11F_EID_MLO_IE,
 				CDS_BAND_2GHZ, &mlo_caps[2],
-				EHT_CAP_OUI_LEN + QDF_MAC_ADDR_SIZE);
+				mlo_cap_total_len);
 
 	status_5g = lim_send_ie(mac_ctx, vdev_id, DOT11F_EID_MLO_IE,
 				CDS_BAND_5GHZ, &mlo_caps[2],
-				EHT_CAP_OUI_LEN + QDF_MAC_ADDR_SIZE);
+				mlo_cap_total_len);
 
 	if (QDF_IS_STATUS_SUCCESS(status_2g) &&
 	    QDF_IS_STATUS_SUCCESS(status_5g)) {
@@ -8893,56 +8889,27 @@ static void lim_get_min_rate(uint8_t *min_rate, tSirMacRateSet *rateset)
 	pe_debug("supported min_rate: %0x(%d)", *min_rate, *min_rate);
 }
 
-static bool lim_is_enable_he_mcs0_for_6ghz_mgmt(struct pe_session *session,
-						qdf_freq_t freq)
-{
-	bool enable_he_mcs0_for_6ghz_mgmt = false;
-
-	if (!wlan_reg_is_6ghz_chan_freq(freq))
-		return enable_he_mcs0_for_6ghz_mgmt;
-
-	/*
-	 * For 6GHz freq and if enable_he_mcs0_for_mgmt_6ghz INI is
-	 * enabled then FW will use rate of MCS0 for 11AX and configured
-	 * via WMI_MGMT_TX_SEND_CMDID
-	 */
-	wlan_mlme_get_mgmt_6ghz_rate_support(
-			session->mac_ctx->psoc,
-			&enable_he_mcs0_for_6ghz_mgmt);
-
-	return enable_he_mcs0_for_6ghz_mgmt;
-}
-
 enum rateid lim_get_min_session_txrate(struct pe_session *session,
 				       qdf_freq_t *pre_auth_freq)
 {
 	enum rateid rid = RATEID_DEFAULT;
 	uint8_t min_rate = SIR_MAC_RATE_54;
 	tSirMacRateSet *rateset;
-	qdf_freq_t op_freq;
 
 	if (!session)
 		return rid;
 
 	rateset = &session->rateSet;
-
 	if (pre_auth_freq) {
 		pe_debug("updated rateset to pre auth freq %d",
 			 *pre_auth_freq);
 		if (*pre_auth_freq &&
-		    !lim_is_enable_he_mcs0_for_6ghz_mgmt(session,
-							*pre_auth_freq))
-				lim_get_basic_rates(rateset, *pre_auth_freq);
+		    !wlan_reg_is_6ghz_chan_freq(*pre_auth_freq))
+			lim_get_basic_rates(rateset, *pre_auth_freq);
 		else
 			return rid;
 	}
-
-	op_freq = wlan_get_operation_chan_freq(session->vdev);
-	if (lim_is_enable_he_mcs0_for_6ghz_mgmt(session, op_freq))
-		return rid;
-
 	lim_get_min_rate(&min_rate, rateset);
-
 	switch (min_rate) {
 	case SIR_MAC_RATE_1:
 		rid = RATEID_1MBPS;
@@ -10253,7 +10220,7 @@ lim_set_tpc_power(struct mac_context *mac_ctx, struct pe_session *session)
 	    session->opmode == QDF_P2P_GO_MODE)
 		mlme_obj->reg_tpc_obj.num_pwr_levels = 0;
 
-	lim_calculate_tpc(mac_ctx, session, 0, false);
+	lim_calculate_tpc(mac_ctx, session, false, 0, false);
 
 	tx_ops->set_tpc_power(mac_ctx->psoc, session->vdev_id,
 			      &mlme_obj->reg_tpc_obj);

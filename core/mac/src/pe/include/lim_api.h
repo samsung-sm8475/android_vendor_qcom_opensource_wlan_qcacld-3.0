@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -146,15 +146,6 @@ QDF_STATUS pe_close(struct mac_context *mac);
 QDF_STATUS lim_start(struct mac_context *mac);
 QDF_STATUS pe_start(struct mac_context *mac);
 void pe_stop(struct mac_context *mac);
-
-/**
- * is_mgmt_protected  -  check RMF enabled for the peer
- * @vdev_id: vdev id
- * @peer_mac_addr: peer mac address
- *
- * Return: True if RMF enabled and key is installed
- */
-bool is_mgmt_protected(uint32_t vdev_id, const uint8_t *peer_mac_addr);
 
 /**
  * lim_stop_pmfcomeback_timer() - stop pmf comeback timer

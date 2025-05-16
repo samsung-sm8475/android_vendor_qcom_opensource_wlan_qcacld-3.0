@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -348,8 +348,7 @@ static struct wma_target_req *wma_find_remove_req_msgtype(tp_wma_handle wma,
 	if (QDF_STATUS_SUCCESS != qdf_list_peek_front(&wma->wma_hold_req_queue,
 						      &node2)) {
 		qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
-		wma_debug("unable to get msg node from request queue for vdev_id %d type %d",
-			  vdev_id, msg_type);
+		wma_err("unable to get msg node from request queue");
 		return NULL;
 	}
 
@@ -366,7 +365,7 @@ static struct wma_target_req *wma_find_remove_req_msgtype(tp_wma_handle wma,
 		if (QDF_STATUS_SUCCESS != status) {
 			qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
 			wma_debug("Failed to remove request. vdev_id %d type %d",
-				  vdev_id, msg_type);
+				 vdev_id, msg_type);
 			return NULL;
 		}
 		break;
@@ -376,13 +375,13 @@ static struct wma_target_req *wma_find_remove_req_msgtype(tp_wma_handle wma,
 
 	qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
 	if (!found) {
-		wma_debug("target request not found for vdev_id %d type %d",
-			  vdev_id, msg_type);
+		wma_err("target request not found for vdev_id %d type %d",
+			 vdev_id, msg_type);
 		return NULL;
 	}
 
 	wma_debug("target request found for vdev id: %d type %d",
-		  vdev_id, msg_type);
+		 vdev_id, msg_type);
 
 	return req_msg;
 }
@@ -688,7 +687,7 @@ static QDF_STATUS wma_vdev_self_peer_delete(tp_wma_handle wma_handle,
 				vdev_id);
 			wma_handle_vdev_detach(wma_handle, pdel_vdev_req_param);
 			mlme_vdev_self_peer_delete_resp(pdel_vdev_req_param);
-			cds_trigger_recovery(QDF_SELF_PEER_DEL_FAILED);
+			cds_trigger_recovery(QDF_REASON_UNSPECIFIED);
 			return status;
 		}
 	} else if (iface->type == WMI_VDEV_TYPE_STA) {
@@ -751,7 +750,7 @@ QDF_STATUS wma_vdev_detach(struct del_vdev_params *pdel_vdev_req_param)
 
 send_fail_rsp:
 	wma_err("rcvd del_self_sta without del_bss; vdev_id:%d", vdev_id);
-	cds_trigger_recovery(QDF_DEL_SELF_STA_FAILED);
+	cds_trigger_recovery(QDF_REASON_UNSPECIFIED);
 	status = QDF_STATUS_E_FAILURE;
 	return status;
 }
@@ -1297,8 +1296,6 @@ QDF_STATUS wma_vdev_start_resp_handler(struct vdev_mlme_obj *vdev_mlme,
 		return QDF_STATUS_E_INVAL;
 
 	mlme_obj->mgmt.generic.tx_pwrlimit = rsp->max_allowed_tx_power;
-	wma_debug("Max allowed tx power: %d", rsp->max_allowed_tx_power);
-
 	if (iface->type == WMI_VDEV_TYPE_STA)
 		assoc_type = mlme_get_assoc_type(vdev_mlme->vdev);
 
@@ -1409,6 +1406,20 @@ wma_vdev_set_param(wmi_unified_t wmi_handle, uint32_t if_id,
 	param.param_value = param_value;
 
 	return wmi_unified_vdev_set_param_send(wmi_handle, &param);
+}
+
+/**
+ * wma_set_peer_authorized_cb() - set peer authorized callback function
+ * @wma_ctx: wma handle
+ * @auth_cb: peer authorized callback
+ *
+ * Return: none
+ */
+void wma_set_peer_authorized_cb(void *wma_ctx, wma_peer_authorized_fp auth_cb)
+{
+	tp_wma_handle wma_handle = (tp_wma_handle) wma_ctx;
+
+	wma_handle->peer_authorized_cb = auth_cb;
 }
 
 /**
@@ -1672,7 +1683,6 @@ peer_detach:
 			cdp_peer_delete(soc, vdev_id, peer_addr, bitmap);
 	}
 
-	wlan_release_peer_key_wakelock(wma->pdev, peer_mac);
 	wma_remove_objmgr_peer(wma, wma->interfaces[vdev_id].vdev, peer_mac);
 
 	wma->interfaces[vdev_id].peer_count--;
@@ -1905,7 +1915,7 @@ QDF_STATUS wma_add_peer(tp_wma_handle wma,
 	if (peer_type == WMI_PEER_TYPE_TDLS)
 		cdp_peer_set_peer_as_tdls(dp_soc, vdev_id, peer_addr, true);
 
-	if (wlan_cm_is_roam_sync_in_progress(wma->psoc, vdev_id) ||
+	if (MLME_IS_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id) ||
 	    MLME_IS_MLO_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id)) {
 		wma_debug("LFR3: Created peer "QDF_MAC_ADDR_FMT" vdev_id %d, peer_count %d",
 			 QDF_MAC_ADDR_REF(peer_addr), vdev_id,
@@ -1984,7 +1994,7 @@ static void wma_cdp_peer_setup(tp_wma_handle wma,
 	    wlan_vdev_mlme_get_is_mlo_link(wma->psoc, vdev_id)) {
 		peer_info.is_first_link = 1;
 		peer_info.is_primary_link = 0;
-	} else if (wlan_cm_is_roam_sync_in_progress(wma->psoc, vdev_id) &&
+	} else if (MLME_IS_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id) &&
 		   wlan_vdev_mlme_get_is_mlo_vdev(wma->psoc, vdev_id)) {
 		peer_info.is_first_link = 0;
 		peer_info.is_primary_link = 1;
@@ -2681,7 +2691,7 @@ static QDF_STATUS wma_set_vdev_latency_level_param(tp_wma_handle wma_handle,
 			mac->mlme_cfg->wlm_config.multi_client_ll_support;
 	multi_client_ll_caps =
 			wlan_mlme_get_wlm_multi_client_ll_caps(mac->psoc);
-	wma_debug("INI support: %d, fw capability:%d",
+	wma_debug("[MULTI_CLIENT] INI support: %d, fw capability:%d",
 		  multi_client_ll_ini_support, multi_client_ll_caps);
 	/*
 	 * Multi-Client arbiter functionality is enabled only if both INI is
@@ -4555,7 +4565,7 @@ static void wma_add_sta_req_ap_mode(tp_wma_handle wma, tpAddStaParams add_sta)
 		  QDF_MAC_ADDR_REF(add_sta->staMac), state);
 	cdp_peer_state_update(soc, add_sta->staMac, state);
 
-	add_sta->nss    = wma_objmgr_get_peer_mlme_nss(wma, add_sta->staMac);
+	add_sta->nss    = iface->nss;
 	add_sta->status = QDF_STATUS_SUCCESS;
 send_rsp:
 	/* Do not send add stat resp when peer assoc cnf is enabled */
@@ -4799,8 +4809,8 @@ static void wma_add_sta_req_sta_mode(tp_wma_handle wma, tpAddStaParams params)
 					      OL_TXRX_PEER_STATE_CONN);
 		}
 
-		if (wlan_cm_is_roam_sync_in_progress(wma->psoc,
-						     params->smesessionId) ||
+		if (MLME_IS_ROAM_SYNCH_IN_PROGRESS(wma->psoc,
+						   params->smesessionId) ||
 		    MLME_IS_MLO_ROAM_SYNCH_IN_PROGRESS(wma->psoc,
 						       params->smesessionId)) {
 			/* iface->nss = params->nss; */
@@ -4998,8 +5008,7 @@ out:
 		  QDF_MAC_ADDR_REF(params->bssId), params->status);
 
 	/* Don't send a response during roam sync operation */
-	if (!wlan_cm_is_roam_sync_in_progress(wma->psoc,
-					      params->smesessionId) &&
+	if (!MLME_IS_ROAM_SYNCH_IN_PROGRESS(wma->psoc, params->smesessionId) &&
 	    !MLME_IS_MLO_ROAM_SYNCH_IN_PROGRESS(wma->psoc,
 						params->smesessionId))
 		wma_send_msg_high_priority(wma, WMA_ADD_STA_RSP,
@@ -5299,8 +5308,6 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 {
 	uint8_t oper_mode = BSS_OPERATIONAL_MODE_STA;
 	void *htc_handle;
-	QDF_STATUS status = QDF_STATUS_SUCCESS;
-	uint8_t vdev_id = add_sta->smesessionId;
 
 	htc_handle = lmac_get_htc_hdl(wma->psoc);
 	if (!htc_handle) {
@@ -5308,13 +5315,13 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 		return;
 	}
 
-	wma_debug("Vdev %d BSSID "QDF_MAC_ADDR_FMT, vdev_id,
+	wma_debug("Vdev %d BSSID "QDF_MAC_ADDR_FMT, add_sta->smesessionId,
 		  QDF_MAC_ADDR_REF(add_sta->bssId));
 
-	if (wma_is_vdev_in_ap_mode(wma, vdev_id))
+	if (wma_is_vdev_in_ap_mode(wma, add_sta->smesessionId))
 		oper_mode = BSS_OPERATIONAL_MODE_AP;
 
-	if (WMA_IS_VDEV_IN_NDI_MODE(wma->interfaces, vdev_id))
+	if (WMA_IS_VDEV_IN_NDI_MODE(wma->interfaces, add_sta->smesessionId))
 		oper_mode = BSS_OPERATIONAL_MODE_NDI;
 	switch (oper_mode) {
 	case BSS_OPERATIONAL_MODE_STA:
@@ -5329,13 +5336,8 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 		break;
 	}
 
-	/*
-	 * not use add_sta after this to avoid use after free
-	 * as it maybe freed.
-	 */
-
 	/* handle wow for sap with 1 or more peer in same way */
-	if (wma_is_vdev_in_sap_mode(wma, vdev_id)) {
+	if (wma_is_vdev_in_sap_mode(wma, add_sta->smesessionId)) {
 		bool is_bus_suspend_allowed_in_sap_mode =
 			(wlan_pmo_get_sap_mode_bus_suspend(wma->psoc) &&
 				wmi_service_enabled(wma->wmi_handle,
@@ -5344,7 +5346,7 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 			htc_vote_link_up(htc_handle, HTC_LINK_VOTE_SAP_USER_ID);
 			wmi_info("sap d0 wow");
 		} else {
-			wmi_debug("sap d3 wow");
+			wmi_info("sap d3 wow");
 			wma_sap_d3_wow_client_connect(wma);
 		}
 		wma_sap_prevent_runtime_pm(wma);
@@ -5353,7 +5355,7 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 	}
 
 	/* handle wow for p2pgo with 1 or more peer in same way */
-	if (wma_is_vdev_in_go_mode(wma, vdev_id)) {
+	if (wma_is_vdev_in_go_mode(wma, add_sta->smesessionId)) {
 		bool is_bus_suspend_allowed_in_go_mode =
 			(wlan_pmo_get_go_mode_bus_suspend(wma->psoc) &&
 				wmi_service_enabled(wma->wmi_handle,
@@ -5371,8 +5373,7 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 	}
 
 	/* handle wow for nan with 1 or more peer in same way */
-	if (BSS_OPERATIONAL_MODE_NDI == oper_mode &&
-	    QDF_IS_STATUS_SUCCESS(status)) {
+	if (BSS_OPERATIONAL_MODE_NDI == oper_mode) {
 		wma_debug("disable runtime pm and vote for link up");
 		htc_vote_link_up(htc_handle, HTC_LINK_VOTE_NDP_USER_ID);
 		wma_ndp_prevent_runtime_pm(wma);
@@ -5388,7 +5389,6 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 	uint8_t vdev_id = del_sta->smesessionId;
 	bool rsp_requested = del_sta->respReqd;
 	void *htc_handle;
-	QDF_STATUS status = QDF_STATUS_SUCCESS;
 
 	htc_handle = lmac_get_htc_hdl(wma->psoc);
 	if (!htc_handle) {
@@ -5405,7 +5405,7 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 
 	switch (oper_mode) {
 	case BSS_OPERATIONAL_MODE_STA:
-		if (wlan_cm_is_roam_sync_in_progress(wma->psoc, vdev_id) ||
+		if (MLME_IS_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id) ||
 		    MLME_IS_MLO_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id)) {
 			wma_debug("LFR3: Del STA on vdev_id %d", vdev_id);
 			qdf_mem_free(del_sta);
@@ -5429,7 +5429,7 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 			qdf_mem_free(del_sta);
 		break;
 	case BSS_OPERATIONAL_MODE_NDI:
-		status = wma_delete_sta_req_ndi_mode(wma, del_sta);
+		wma_delete_sta_req_ndi_mode(wma, del_sta);
 		break;
 	default:
 		wma_err("Incorrect oper mode %d", oper_mode);
@@ -5446,7 +5446,7 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 					   HTC_LINK_VOTE_SAP_USER_ID);
 			wmi_info("sap d0 wow");
 		} else {
-			wmi_debug("sap d3 wow");
+			wmi_info("sap d3 wow");
 			wma_sap_d3_wow_client_disconnect(wma);
 		}
 		wma_sap_allow_runtime_pm(wma);
@@ -5472,8 +5472,7 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 		return;
 	}
 
-	if (BSS_OPERATIONAL_MODE_NDI == oper_mode &&
-	    QDF_IS_STATUS_SUCCESS(status)) {
+	if (BSS_OPERATIONAL_MODE_NDI == oper_mode) {
 		wma_debug("allow runtime pm and vote for link down");
 		htc_vote_link_down(htc_handle, HTC_LINK_VOTE_NDP_USER_ID);
 		wma_ndp_allow_runtime_pm(wma);
@@ -5684,7 +5683,7 @@ void wma_delete_bss(tp_wma_handle wma, uint8_t vdev_id)
 		qdf_mem_free(roam_scan_stats_req);
 	}
 
-	if (wlan_cm_is_roam_sync_in_progress(wma->psoc, vdev_id) ||
+	if (MLME_IS_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id) ||
 	    MLME_IS_MLO_ROAM_SYNCH_IN_PROGRESS(wma->psoc, vdev_id)) {
 		roam_synch_in_progress = true;
 		wma_debug("LFR3: Setting vdev_up to FALSE for vdev:%d",

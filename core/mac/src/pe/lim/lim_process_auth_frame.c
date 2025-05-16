@@ -489,7 +489,7 @@ static void lim_process_sae_auth_frame(struct mac_context *mac_ctx,
 		wlan_connectivity_mgmt_event(
 			(struct wlan_frame_hdr *)mac_hdr, pe_session->vdev_id,
 			sae_status_code, 0,
-			WMA_GET_RX_RSSI_NORMALIZED(rx_pkt_info), auth_algo,
+			WMA_GET_RX_RSSI_NORMALIZED(rx_pkt_info), auth_algo, 0,
 			sae_auth_seq, sae_auth_seq, WLAN_AUTH_RESP);
 	}
 
@@ -1354,14 +1354,6 @@ lim_process_auth_frame(struct mac_context *mac_ctx, uint8_t *rx_pkt_info,
 		return;
 	}
 
-	/* Duplicate Auth frame from peer */
-	auth_node = lim_search_pre_auth_list(mac_ctx, mac_hdr->sa);
-	if (auth_node && (auth_node->seq_num == curr_seq_num)) {
-		pe_err("Received an already processed auth frame with seq_num : %d",
-		       curr_seq_num);
-		return;
-	}
-
 	/* save seq number and mac_addr in pe_session */
 	pe_session->prev_auth_seq_num = curr_seq_num;
 	qdf_mem_copy(pe_session->prev_auth_mac_addr, mac_hdr->sa, ETH_ALEN);
@@ -1493,6 +1485,7 @@ lim_process_auth_frame(struct mac_context *mac_ctx, uint8_t *rx_pkt_info,
 		 * Authentication frame3 and there is a context for requesting
 		 * STA. If not, reject with unspecified failure status code
 		 */
+		auth_node = lim_search_pre_auth_list(mac_ctx, mac_hdr->sa);
 		if (!auth_node) {
 			pe_err("rx Auth frame with no preauth ctx with WEP bit set "
 				QDF_MAC_ADDR_FMT,
@@ -1664,7 +1657,7 @@ lim_process_auth_frame(struct mac_context *mac_ctx, uint8_t *rx_pkt_info,
 				     0, WMA_GET_RX_RSSI_NORMALIZED(rx_pkt_info),
 				     auth_alg, 0,
 				     rx_auth_frm_body->authTransactionSeqNumber,
-				     WLAN_AUTH_RESP);
+				     0, WLAN_AUTH_RESP);
 	switch (rx_auth_frm_body->authTransactionSeqNumber) {
 	case SIR_MAC_AUTH_FRAME_1:
 		lim_process_auth_frame_type1(mac_ctx,
@@ -1758,7 +1751,7 @@ bool lim_process_sae_preauth_frame(struct mac_context *mac, uint8_t *rx_pkt)
 				     vdev_id, sae_status_code,
 				     0, WMA_GET_RX_RSSI_NORMALIZED(rx_pkt),
 				     auth_alg, sae_auth_seq,
-				     sae_auth_seq, WLAN_AUTH_RESP);
+				     sae_auth_seq, 0, WLAN_AUTH_RESP);
 
 	lim_send_sme_mgmt_frame_ind(mac, dot11_hdr->fc.subType,
 				    (uint8_t *)dot11_hdr,

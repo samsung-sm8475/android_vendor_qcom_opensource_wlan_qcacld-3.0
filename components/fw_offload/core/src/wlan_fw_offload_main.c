@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -24,6 +24,9 @@
 #include "cds_api.h"
 #include "wma.h"
 #include "wlan_fwol_tgt_api.h"
+#ifdef SEC_CONFIG_PSM_SYSFS
+extern int wlan_hdd_sec_get_psm(void);
+#endif /* SEC_CONFIG_PSM_SYSFS */
 
 struct wlan_fwol_psoc_obj *fwol_get_psoc_obj(struct wlan_objmgr_psoc *psoc)
 {
@@ -110,10 +113,6 @@ fwol_init_coex_config_in_cfg(struct wlan_objmgr_psoc *psoc,
 	fwol_three_way_coex_config_legacy_config_get(psoc, coex_config);
 	coex_config->ble_scan_coex_policy = cfg_get(psoc,
 						    CFG_BLE_SCAN_COEX_POLICY);
-#ifdef FEATURE_COEX_TPUT_SHAPING_CONFIG
-	coex_config->coex_tput_shaping_enable =
-				cfg_get(psoc, CFG_TPUT_SHAPING_ENABLE);
-#endif
 }
 
 #ifdef THERMAL_STATS_SUPPORT
@@ -247,6 +246,12 @@ QDF_STATUS fwol_init_neighbor_report_cfg(struct wlan_objmgr_psoc *psoc,
 		cfg_get(psoc, CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT);
 	fwol_neighbor_report_cfg->max_req_cap =
 		cfg_get(psoc, CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP);
+#ifdef SEC_CONFIG_PSM_SYSFS
+	if (wlan_hdd_sec_get_psm()) {
+		fwol_neighbor_report_cfg->enable_bitmask = 0;
+		printk("[WIFI] CFG_OFFLOAD_11K_ENABLE_BITMASK : sec_control_psm = %u", fwol_neighbor_report_cfg->enable_bitmask);
+	}
+#endif /* SEC_CONFIG_PSM_SYSFS */
 
 	fwol_set_neighbor_report_offload_params(psoc, fwol_neighbor_report_cfg);
 

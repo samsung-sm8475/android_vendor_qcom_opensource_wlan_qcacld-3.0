@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1187,10 +1187,10 @@ int wlan_hdd_ipv4_changed(struct notifier_block *nb,
  * CPU can enter CXPC mode.
  * The vote value is in microseconds.
  */
-static bool wlan_hdd_is_cpu_cxpc_allowed(struct hdd_context *hdd_ctx,
-					 unsigned long vote)
+#define HDD_CPU_CXPC_THRESHOLD (10000)
+static bool wlan_hdd_is_cpu_cxpc_allowed(unsigned long vote)
 {
-	if (vote >= hdd_ctx->config->cpu_cxpc_threshold)
+	if (vote >= HDD_CPU_CXPC_THRESHOLD)
 		return true;
 	else
 		return false;
@@ -1222,11 +1222,11 @@ int wlan_hdd_pm_qos_notify(struct notifier_block *nb, unsigned long curr_val,
 
 	if (!hdd_ctx->runtime_pm_prevented &&
 	    is_any_sta_connected &&
-	    !wlan_hdd_is_cpu_cxpc_allowed(hdd_ctx, curr_val)) {
+	    !wlan_hdd_is_cpu_cxpc_allowed(curr_val)) {
 		hif_pm_runtime_get_noresume(hif_ctx, RTPM_ID_QOS_NOTIFY);
 		hdd_ctx->runtime_pm_prevented = true;
 	} else if (hdd_ctx->runtime_pm_prevented &&
-		   wlan_hdd_is_cpu_cxpc_allowed(hdd_ctx, curr_val)) {
+		   wlan_hdd_is_cpu_cxpc_allowed(curr_val)) {
 		hif_pm_runtime_put(hif_ctx, RTPM_ID_QOS_NOTIFY);
 		hdd_ctx->runtime_pm_prevented = false;
 	}
@@ -1256,7 +1256,7 @@ bool wlan_hdd_is_cpu_pm_qos_in_progress(struct hdd_context *hdd_ctx)
 	curr_val_ns = cpuidle_governor_latency_req(max_cpu_num);
 	curr_val_us = curr_val_ns / NSEC_PER_USEC;
 	hdd_debug("PM QoS current value: %lld", curr_val_us);
-	if (!wlan_hdd_is_cpu_cxpc_allowed(hdd_ctx, curr_val_us))
+	if (!wlan_hdd_is_cpu_cxpc_allowed(curr_val_us))
 		return true;
 	else
 		return false;
@@ -1651,6 +1651,8 @@ hdd_suspend_wlan(void)
 	QDF_STATUS status;
 	struct hdd_adapter *adapter = NULL, *next_adapter = NULL;
 	uint32_t conn_state_mask = 0;
+	ol_txrx_soc_handle soc = cds_get_context(QDF_MODULE_ID_SOC);
+	cdp_config_param_type val = {0};
 
 	hdd_info("WLAN being suspended by OS");
 
@@ -1681,6 +1683,11 @@ hdd_suspend_wlan(void)
 
 		if (adapter->device_mode == QDF_STA_MODE)
 			status = hdd_enable_default_pkt_filters(adapter);
+
+		if (adapter->device_mode == QDF_SAP_MODE ||
+		    adapter->device_mode == QDF_P2P_GO_MODE)
+			cdp_txrx_set_vdev_param(soc, adapter->vdev_id,
+						CDP_ENABLE_AP_BRIDGE, val);
 
 		/* Configure supported OffLoads */
 		hdd_enable_host_offloads(adapter, pmo_apps_suspend);
@@ -1717,6 +1724,8 @@ static int hdd_resume_wlan(void)
 	struct hdd_context *hdd_ctx;
 	struct hdd_adapter *adapter, *next_adapter = NULL;
 	QDF_STATUS status;
+	ol_txrx_soc_handle soc = cds_get_context(QDF_MODULE_ID_SOC);
+	cdp_config_param_type val = {0};
 
 	hdd_info("WLAN being resumed by OS");
 
@@ -1754,6 +1763,13 @@ static int hdd_resume_wlan(void)
 
 		if (adapter->device_mode == QDF_STA_MODE)
 			status = hdd_disable_default_pkt_filters(adapter);
+
+		if (adapter->device_mode == QDF_SAP_MODE ||
+		    adapter->device_mode == QDF_P2P_GO_MODE) {
+			val.cdp_vdev_param_ap_brdg_en = true;
+			cdp_txrx_set_vdev_param(soc, adapter->vdev_id,
+						CDP_ENABLE_AP_BRIDGE, val);
+		}
 
 		hdd_adapter_dev_put_debug(adapter, NET_DEV_HOLD_RESUME_WLAN);
 	}
@@ -2492,12 +2508,8 @@ static int __wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
 	}
 
 	rc = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != rc) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return rc;
-	}
+	if (0 != rc)
+		return rc;
 
 	if (ucfg_pmo_get_suspend_mode(hdd_ctx->psoc) == PMO_SUSPEND_NONE) {
 		hdd_info_rl("Suspend is not supported");
@@ -2742,12 +2754,8 @@ static int _wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
 	}
 
 	errno = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != errno) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return errno;
-	}
+	if (errno)
+		return errno;
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!hif_ctx)
@@ -2774,12 +2782,8 @@ int wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
 	struct hdd_context *hdd_ctx = wiphy_priv(wiphy);
 
 	errno = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != errno) {
-		if (pld_is_low_power_mode(hdd_ctx->parent_dev))
-			hdd_debug("low power mode (Deep Sleep/Hibernate)");
-		else
-			return errno;
-	}
+	if (0 != errno)
+		return errno;
 
 	/*
 	 * Flush the idle shutdown before ops start.This is done here to avoid
@@ -3012,6 +3016,7 @@ static int __wlan_hdd_cfg80211_set_txpower(struct wiphy *wiphy,
 	switch (type) {
 	/* Automatically determine transmit power */
 	case NL80211_TX_POWER_AUTOMATIC:
+	/* Fall through */
 	case NL80211_TX_POWER_LIMITED:
 	/* Limit TX power by the mBm parameter */
 		status = sme_set_max_tx_power(mac_handle, bssid, selfmac, dbm);

@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1051,9 +1050,10 @@ enum set_hw_mode_status {
 	SET_HW_MODE_STATUS_ALREADY,
 };
 
-typedef void (*dual_mac_cb)(enum set_hw_mode_status status,
-		uint32_t scan_config,
-		uint32_t fw_mode_config);
+typedef void (*dual_mac_cb)(struct wlan_objmgr_psoc *psoc,
+			    enum set_hw_mode_status status,
+			    uint32_t scan_config,
+			    uint32_t fw_mode_config);
 /**
  * enum policy_mgr_hw_mode_change - identify the HW mode switching to.
  *
@@ -1423,26 +1423,6 @@ struct go_plus_go_force_scc {
 struct sta_ap_intf_check_work_ctx {
 	struct wlan_objmgr_psoc *psoc;
 	struct go_plus_go_force_scc go_plus_go_force_scc;
-};
-
-/**
- * enum indoor_conc_update_type - Indoor concurrency update type
- * @CONNECT - On a new STA connection
- * @DISCONNECT_WITHOUT_CONCURRENCY - On a STA disconnection with no active
- * sessions on the same frequency
- * @DISCONNECT_WITH_CONCURRENCY - On a STA disconnection with an active
- * session on the same frequency
- * @SWITCH_WITH_CONCURRENCY - On a STA roam or CSA to a different channel
- * with a concurrent SAP on previous frequency
- * @SWITCH_WITHOUT_CONCURRENCY - On a STA roam or CSA to a different channel
- * without any concurrent SAP on previous frequency
- */
-enum indoor_conc_update_type {
-	CONNECT,
-	DISCONNECT_WITHOUT_CONCURRENCY,
-	DISCONNECT_WITH_CONCURRENCY,
-	SWITCH_WITHOUT_CONCURRENCY,
-	SWITCH_WITH_CONCURRENCY,
 };
 
 #endif /* __WLAN_POLICY_MGR_PUBLIC_STRUCT_H */

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -86,7 +86,6 @@
 #include "wlan_mlo_mgr_sta.h"
 #include "wlan_mlo_mgr_peer.h"
 #include <wlan_twt_api.h>
-#include "wlan_tdls_api.h"
 
 struct pe_hang_event_fixed_param {
 	uint16_t tlv_header;
@@ -635,8 +634,18 @@ static void pe_shutdown_notifier_cb(void *ctx)
 	}
 }
 
-bool is_mgmt_protected(uint32_t vdev_id,
-		       const uint8_t *peer_mac_addr)
+/**
+ * is_mgmt_protected - check RMF enabled for the peer
+ * @vdev_id: vdev id
+ * @peer_mac_addr: peer mac address
+ *
+ * The function check the mgmt frame protection enabled or not
+ * for station mode and AP mode
+ *
+ * Return: true, if the connection is RMF enabled.
+ */
+static bool is_mgmt_protected(uint32_t vdev_id,
+				  const uint8_t *peer_mac_addr)
 {
 	uint16_t aid;
 	tpDphHashNode sta_ds;
@@ -1958,7 +1967,8 @@ lim_roam_gen_mbssid_beacon(struct mac_context *mac,
 	}
 
 	if (!nontx_bcn_prbrsp_len) {
-		pe_debug("failed to generate/find MBSSID beacon");
+		pe_debug("failed to generate/find MBSSID beacon, list_count:%d",
+			 list_count);
 		goto error;
 	}
 
@@ -2117,6 +2127,7 @@ lim_roam_fill_bss_descr(struct mac_context *mac,
 	QDF_STATUS status;
 	uint8_t *ie = NULL;
 	struct qdf_mac_addr bssid;
+	struct cm_roam_values_copy mdie_cfg = {0};
 
 	bcn_proberesp_ptr = (uint8_t *)roam_synch_ind_ptr +
 		roam_synch_ind_ptr->beaconProbeRespOffset;
@@ -2201,11 +2212,9 @@ lim_roam_fill_bss_descr(struct mac_context *mac,
 		bss_desc_ptr->chan_freq = roam_synch_ind_ptr->chan_freq;
 	}
 
-	bss_desc_ptr->nwType = lim_get_nw_type(
-			mac,
-			bss_desc_ptr->chan_freq,
-			SIR_MAC_MGMT_FRAME,
-			parsed_frm_ptr);
+	bss_desc_ptr->nwType = lim_get_nw_type(mac, bss_desc_ptr->chan_freq,
+					       SIR_MAC_MGMT_FRAME,
+					       parsed_frm_ptr);
 
 	bss_desc_ptr->sinr = 0;
 	bss_desc_ptr->beaconInterval = parsed_frm_ptr->beaconInterval;
@@ -2229,10 +2238,17 @@ lim_roam_fill_bss_descr(struct mac_context *mac,
 		qdf_mem_copy((uint8_t *)bss_desc_ptr->mdie,
 				(uint8_t *)parsed_frm_ptr->mdie,
 				SIR_MDIE_SIZE);
+		mdie_cfg.bool_value = true;
+		mdie_cfg.uint_value =
+			(bss_desc_ptr->mdie[1] << 8) | (bss_desc_ptr->mdie[0]);
+
+		wlan_cm_roam_cfg_set_value(mac->psoc, vdev_id,
+					   MOBILITY_DOMAIN, &mdie_cfg);
 	}
-	pe_debug("chan: %d rssi: %d ie_len %d",
+	pe_debug("chan: %d rssi: %d ie_len %d mdie_present:%d mdie = %02x %02x %02x",
 		 bss_desc_ptr->chan_freq,
-		 bss_desc_ptr->rssi, ie_len);
+		 bss_desc_ptr->rssi, ie_len, bss_desc_ptr->mdiePresent,
+		 bss_desc_ptr->mdie[0], bss_desc_ptr->mdie[1], bss_desc_ptr->mdie[2]);
 
 	qdf_mem_free(parsed_frm_ptr);
 	if (ie_len) {
@@ -2524,14 +2540,11 @@ lim_check_ft_initial_im_association(struct roam_offload_synch_ind *roam_synch,
 	hdr = (tpSirMacMgmtHdr) assoc_req_ptr;
 
 	if (hdr->fc.type == SIR_MAC_MGMT_FRAME &&
-	    hdr->fc.subType == SIR_MAC_MGMT_ASSOC_REQ) {
-		roam_synch->is_assoc = true;
-		if (session_entry->is11Rconnection) {
-			pe_debug("Frame subtype: %d and connection is %d",
-				 hdr->fc.subType,
-				 session_entry->is11Rconnection);
-			roam_synch->is_ft_im_roam = true;
-		}
+	    hdr->fc.subType == SIR_MAC_MGMT_ASSOC_REQ &&
+	    session_entry->is11Rconnection) {
+		pe_debug("Frame subtype: %d and connection is %d",
+			 hdr->fc.subType, session_entry->is11Rconnection);
+		roam_synch->is_ft_im_roam = true;
 	}
 }
 
@@ -2723,13 +2736,6 @@ pe_roam_synch_callback(struct mac_context *mac_ctx,
 		(struct bss_params *) ft_session_ptr->ftPEContext.pAddBssReq;
 	add_bss_params = ft_session_ptr->ftPEContext.pAddBssReq;
 	lim_delete_tdls_peers(mac_ctx, session_ptr);
-	/*
-	 * After deleting the TDLS peers notify the Firmware about TDLS STA
-	 * disconnection due to roaming
-	 */
-	wlan_tdls_notify_sta_disconnect(vdev_id, true,
-					false, session_ptr->vdev);
-
 	curr_sta_ds = dph_lookup_hash_entry(mac_ctx, session_ptr->bssId, &aid,
 					    &session_ptr->dph.dphHashTable);
 	if (!curr_sta_ds && !is_multi_link_roam(roam_sync_ind_ptr)) {
@@ -3407,7 +3413,7 @@ void
 lim_mlo_roam_delete_link_peer(struct pe_session *pe_session,
 			      tpDphHashNode sta_ds)
 {
-	struct wlan_objmgr_peer *peer = NULL;
+	struct wlan_objmgr_peer *peer;
 	struct mac_context *mac;
 
 	mac = cds_get_context(QDF_MODULE_ID_PE);
@@ -3427,10 +3433,6 @@ lim_mlo_roam_delete_link_peer(struct pe_session *pe_session,
 	peer = wlan_objmgr_get_peer_by_mac(mac->psoc,
 					   sta_ds->staAddr,
 					   WLAN_LEGACY_MAC_ID);
-	if (!peer) {
-		mlo_err("Peer is null");
-		return;
-	}
 
 	wlan_mlo_link_peer_delete(peer);
 

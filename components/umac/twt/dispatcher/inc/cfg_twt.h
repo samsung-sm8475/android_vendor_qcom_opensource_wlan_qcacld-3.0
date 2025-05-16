@@ -50,7 +50,7 @@
  * twt_responder - twt responder.
  * @Min: 0
  * @Max: 1
- * @Default: false
+ * @Default: 1
  *
  * This cfg is used to store twt responder config.
  *
@@ -64,7 +64,7 @@
  */
 #define CFG_TWT_RESPONDER CFG_INI_BOOL( \
 		"twt_responder", \
-		false, \
+		1, \
 		"TWT responder")
 
 /*

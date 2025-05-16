@@ -248,7 +248,8 @@ enum {
   Function declarations and documenation
   ------------------------------------------------------------------------*/
 QDF_STATUS sme_open(mac_handle_t mac_handle);
-QDF_STATUS sme_init_chan_list(mac_handle_t mac_handle, enum country_src cc_src);
+QDF_STATUS sme_init_chan_list(mac_handle_t mac_handle, uint8_t *alpha2,
+		enum country_src cc_src);
 QDF_STATUS sme_close(mac_handle_t mac_handle);
 QDF_STATUS sme_start(mac_handle_t mac_handle);
 
@@ -681,6 +682,30 @@ QDF_STATUS sme_roam_set_psk_pmk(mac_handle_t mac_handle,
  */
 QDF_STATUS sme_set_pmk_cache_ft(mac_handle_t mac_handle, uint8_t vdev_id,
 				struct wlan_crypto_pmksa *pmk_cache);
+
+/**
+ * sme_roam_events_register_callback() - Register roam events callback
+ * @mac_handle: Opaque handle to the MAC context
+ * @roam_rt_stats_cb: Function to be invoked for roam events stats
+ *
+ * This function will register a callback for roams events stats.
+ *
+ * Return: void
+ */
+void sme_roam_events_register_callback(mac_handle_t mac_handle,
+				       void (*roam_rt_stats_cb)(
+				hdd_handle_t hdd_handle, uint8_t idx,
+				struct roam_stats_event *roam_stats));
+
+/**
+ * sme_roam_events_deregister_callback() - DeRegister roam events callback
+ * @mac_handle: Opaque handle to the MAC context
+ *
+ * This function will deregister the callback of roams events stats.
+ *
+ * Return: void
+ */
+void sme_roam_events_deregister_callback(mac_handle_t mac_handle);
 #else
 static inline
 void sme_get_pmk_info(mac_handle_t mac_handle, uint8_t session_id,
@@ -716,6 +741,16 @@ QDF_STATUS sme_set_pmk_cache_ft(mac_handle_t mac_handle, uint8_t vdev_id,
 	return QDF_STATUS_SUCCESS;
 }
 
+static inline void
+sme_roam_events_register_callback(mac_handle_t mac_handle,
+				  void (*roam_rt_stats_cb)(
+				hdd_handle_t hdd_handle, uint8_t idx,
+				struct roam_stats_event *roam_stats))
+{}
+
+static inline
+void sme_roam_events_deregister_callback(mac_handle_t mac_handle)
+{}
 #endif
 
 QDF_STATUS sme_get_config_param(mac_handle_t mac_handle,
@@ -787,25 +822,6 @@ QDF_STATUS sme_neighbor_report_request(mac_handle_t mac_handle,
 		 uint8_t sessionId,
 		tpRrmNeighborReq pRrmNeighborReq,
 		tpRrmNeighborRspCallbackInfo callbackInfo);
-
-/**
- * sme_register_ssr_on_pagefault_cb() - Register cb to trigger SSR on pagefault
- * @mac_handle: Opaque handle to the global MAC context.
- * @hdd_ssr_on_pagefault_cb: Callback which needs to be registered
- *
- * Return: None
- */
-void sme_register_ssr_on_pagefault_cb(mac_handle_t mac_handle,
-				      void (*hdd_ssr_on_pagefault_cb)(void));
-
-/**
- * sme_deregister_ssr_on_pagefault_cb() - Deregister cb to trigger SSR on
- * pagefault
- * @mac_handle: Opaque handle to the global MAC context.
- *
- * Return: None
- */
-void sme_deregister_ssr_on_pagefault_cb(mac_handle_t mac_handle);
 
 #ifdef FEATURE_OEM_DATA
 /**
@@ -1903,7 +1919,9 @@ QDF_STATUS sme_nss_update_request(uint32_t vdev_id,
 				  uint32_t original_vdev_id,
 				  uint32_t request_id);
 
+typedef void (*sme_peer_authorized_fp) (uint32_t vdev_id);
 QDF_STATUS sme_set_peer_authorized(uint8_t *peer_addr,
+				   sme_peer_authorized_fp auth_fp,
 				   uint32_t vdev_id);
 QDF_STATUS sme_soc_set_dual_mac_config(struct policy_mgr_dual_mac_config msg);
 QDF_STATUS sme_soc_set_antenna_mode(mac_handle_t mac_handle,
@@ -4384,6 +4402,21 @@ QDF_STATUS sme_get_ani_level(mac_handle_t mac_handle, uint32_t *freqs,
 			     void *context), void *context);
 #endif /* FEATURE_ANI_LEVEL_REQUEST */
 
+/**
+ * sme_get_prev_connected_bss_ies() - Get the previous connected AP IEs
+ * @mac_handle: The handle returned by mac_open.
+ * @vdev_id: vdev id
+ * @ies: IEs of the disconnected AP. Currently to carry beacon IEs.
+ * @ie_len: Length of the @ies
+ *
+ * This API extracts the IEs from the previous connected AP info and update
+ * them to the ies and ie_len.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_get_prev_connected_bss_ies(mac_handle_t mac_handle,
+					  uint8_t vdev_id,
+					  uint8_t **ies, uint32_t *ie_len);
 /*
  * sme_vdev_self_peer_delete_resp() - Response for self peer delete
  * @del_vdev_params: parameters for which vdev self peer has been deleted

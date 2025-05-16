@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -31,7 +31,6 @@
 #include "wlan_utility.h"
 #include "wlan_policy_mgr_ucfg.h"
 #include "wlan_vdev_mgr_utils_api.h"
-#include <../../core/src/wlan_cm_vdev_api.h>
 
 /* quota in milliseconds */
 #define MCC_DUTY_CYCLE 70
@@ -205,29 +204,6 @@ QDF_STATUS wlan_mlme_set_ht_mpdu_density(struct wlan_objmgr_psoc *psoc,
 
 	return QDF_STATUS_SUCCESS;
 }
-
-#ifdef MULTI_CLIENT_LL_SUPPORT
-bool wlan_mlme_get_wlm_multi_client_ll_caps(struct wlan_objmgr_psoc *psoc)
-{
-	return wlan_psoc_nif_fw_ext2_cap_get(psoc,
-					WLAN_SOC_WLM_MULTI_CLIENT_LL_SUPPORT);
-}
-#endif
-
-#ifdef FEATURE_WLAN_CH_AVOID_EXT
-bool wlan_mlme_get_coex_unsafe_chan_nb_user_prefer(
-		struct wlan_objmgr_psoc *psoc)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj) {
-		mlme_legacy_err("Failed to get MLME Obj");
-		return cfg_default(CFG_COEX_UNSAFE_CHAN_NB_USER_PREFER);
-	}
-	return mlme_obj->cfg.reg.coex_unsafe_chan_nb_user_prefer;
-}
-#endif
 
 QDF_STATUS wlan_mlme_get_band_capability(struct wlan_objmgr_psoc *psoc,
 					 uint32_t *band_capability)
@@ -2625,30 +2601,6 @@ QDF_STATUS wlan_mlme_set_primary_interface(struct wlan_objmgr_psoc *psoc,
 	return QDF_STATUS_SUCCESS;
 }
 
-QDF_STATUS wlan_mlme_peer_get_assoc_rsp_ies(struct wlan_objmgr_peer *peer,
-					    const uint8_t **ie_buf,
-					    size_t *ie_len)
-{
-	struct peer_mlme_priv_obj *peer_priv;
-
-	if (!peer || !ie_buf || !ie_len)
-		return QDF_STATUS_E_INVAL;
-
-	*ie_buf = NULL;
-	*ie_len = 0;
-
-	peer_priv = wlan_objmgr_peer_get_comp_private_obj(peer,
-							  WLAN_UMAC_COMP_MLME);
-
-	if (!peer_priv || peer_priv->assoc_rsp.len == 0)
-		return QDF_STATUS_SUCCESS;
-
-	*ie_buf = peer_priv->assoc_rsp.ptr;
-	*ie_len = peer_priv->assoc_rsp.len;
-
-	return QDF_STATUS_SUCCESS;
-}
-
 int wlan_mlme_get_mcc_duty_cycle_percentage(struct wlan_objmgr_pdev *pdev)
 {
 	struct wlan_objmgr_psoc *psoc = NULL;
@@ -4408,25 +4360,6 @@ wlan_mlme_get_mgmt_max_retry(struct wlan_objmgr_psoc *psoc,
 }
 
 QDF_STATUS
-wlan_mlme_get_mgmt_6ghz_rate_support(struct wlan_objmgr_psoc *psoc,
-				     bool *enable_he_mcs0_for_6ghz_mgmt)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-
-	if (!mlme_obj) {
-		*enable_he_mcs0_for_6ghz_mgmt =
-			cfg_default(CFG_ENABLE_HE_MCS0_MGMT_6GHZ);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	*enable_he_mcs0_for_6ghz_mgmt =
-		mlme_obj->cfg.gen.enable_he_mcs0_for_6ghz_mgmt;
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS
 wlan_mlme_get_status_ring_buffer(struct wlan_objmgr_psoc *psoc,
 				 bool *enable_ring_buffer)
 {
@@ -5046,14 +4979,10 @@ wlan_mlme_check_chan_param_has_dfs(struct wlan_objmgr_pdev *pdev,
 			pdev,
 			ch_params->mhz_freq_seg1) == CHANNEL_STATE_DFS)
 			is_dfs = true;
-	} else if (wlan_reg_is_dfs_for_freq(pdev, chan_freq)) {
-		/*Indoor channels are also marked DFS, therefore
-		 * check if the channel has REGULATORY_CHAN_RADAR
-		 * channel flag to identify if the channel is DFS
-		 */
+	} else if (wlan_reg_get_channel_state_for_freq(
+			pdev, chan_freq) == CHANNEL_STATE_DFS) {
 		is_dfs = true;
 	}
-
 	if (WLAN_REG_IS_6GHZ_CHAN_FREQ(chan_freq) ||
 	    WLAN_REG_IS_24GHZ_CH_FREQ(chan_freq))
 		is_dfs = false;
@@ -5563,57 +5492,6 @@ wlan_mlme_update_ratemask_params(struct wlan_objmgr_vdev *vdev,
 	return QDF_STATUS_SUCCESS;
 }
 
-void wlan_mlme_get_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
-				    bool *safe_mode_enable)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj) {
-		mlme_legacy_err("invalid mlme obj");
-		*safe_mode_enable = false;
-		return;
-	}
-
-	*safe_mode_enable = mlme_obj->cfg.gen.safe_mode_enable;
-}
-
-void wlan_mlme_set_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
-		bool safe_mode_enable)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj) {
-		mlme_legacy_err("invalid mlme obj");
-		return;
-	}
-
-	mlme_obj->cfg.gen.safe_mode_enable = safe_mode_enable;
-}
-
-uint32_t wlan_mlme_get_6g_ap_power_type(struct wlan_objmgr_vdev *vdev)
-{
-	struct vdev_mlme_obj *mlme_obj;
-
-	mlme_obj = wlan_vdev_mlme_get_cmpt_obj(vdev);
-
-	if (!mlme_obj) {
-		mlme_legacy_err("vdev component object is NULL");
-		return REG_MAX_AP_TYPE;
-	}
-
-	return mlme_obj->reg_tpc_obj.power_type_6g;
-}
-
-QDF_STATUS wlan_connect_hw_mode_change_resp(struct wlan_objmgr_pdev *pdev,
-					    uint8_t vdev_id,
-					    wlan_cm_id cm_id, QDF_STATUS status)
-{
-	return wlan_cm_handle_hw_mode_change_resp(pdev, vdev_id, cm_id,
-						  status);
-}
-
 #ifdef WLAN_FEATURE_11BE
 static inline bool
 wlan_mlme_is_phymode_320_mhz(enum wlan_phymode phy_mode,
@@ -5673,3 +5551,47 @@ wlan_mlme_get_peer_ch_width(struct wlan_objmgr_psoc *psoc, uint8_t *mac)
 
 	return wlan_mlme_get_ch_width_from_phymode(phy_mode);
 }
+
+uint32_t wlan_mlme_get_6g_ap_power_type(struct wlan_objmgr_vdev *vdev)
+{
+	struct vdev_mlme_obj *mlme_obj;
+
+	mlme_obj = wlan_vdev_mlme_get_cmpt_obj(vdev);
+
+	if (!mlme_obj) {
+		mlme_legacy_err("vdev component object is NULL");
+		return REG_MAX_AP_TYPE;
+	}
+
+	return mlme_obj->reg_tpc_obj.power_type_6g;
+}
+
+void wlan_mlme_get_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
+				    bool *safe_mode_enable)
+{
+	struct wlan_mlme_psoc_ext_obj *mlme_obj;
+
+	mlme_obj = mlme_get_psoc_ext_obj(psoc);
+	if (!mlme_obj) {
+		mlme_legacy_err("invalid mlme obj");
+		*safe_mode_enable = false;
+		return;
+	}
+
+	*safe_mode_enable = mlme_obj->cfg.gen.safe_mode_enable;
+}
+
+void wlan_mlme_set_safe_mode_enable(struct wlan_objmgr_psoc *psoc,
+		bool safe_mode_enable)
+{
+	struct wlan_mlme_psoc_ext_obj *mlme_obj;
+
+	mlme_obj = mlme_get_psoc_ext_obj(psoc);
+	if (!mlme_obj) {
+		mlme_legacy_err("invalid mlme obj");
+		return;
+	}
+
+	mlme_obj->cfg.gen.safe_mode_enable = safe_mode_enable;
+}
+

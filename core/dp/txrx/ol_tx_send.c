@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -829,14 +828,13 @@ struct htt_tx_compl_ind_append_tx_tsf64 *ol_tx_get_txtstamp64s(
 }
 
 static inline void ol_tx_timestamp(ol_txrx_pdev_handle pdev,
-				   enum htt_tx_status status,
 				   qdf_nbuf_t netbuf, u_int64_t ts)
 {
 	if (!netbuf)
 		return;
 
 	if (pdev->ol_tx_timestamp_cb)
-		pdev->ol_tx_timestamp_cb(status, netbuf, ts);
+		pdev->ol_tx_timestamp_cb(netbuf, ts);
 }
 #else
 static inline struct htt_tx_compl_ind_append_tx_tstamp *ol_tx_get_txtstamps(
@@ -855,11 +853,10 @@ struct htt_tx_compl_ind_append_tx_tsf64 *ol_tx_get_txtstamp64s(
 }
 
 static inline void ol_tx_timestamp(ol_txrx_pdev_handle pdev,
-				   enum htt_tx_status status,
 				   qdf_nbuf_t netbuf, u_int64_t ts)
 {
 }
-#endif /* WLAN_FEATURE_TSF_PLUS_SOCK_TS */
+#endif
 
 static void ol_tx_update_ack_count(struct ol_tx_desc_t *tx_desc,
 				   enum htt_tx_status status)
@@ -959,53 +956,6 @@ static void ol_tx_update_connectivity_stats(struct ol_tx_desc_t *tx_desc,
 	}
 }
 
-#ifdef CONNECTIVITY_PKTLOG
-static inline enum qdf_dp_tx_rx_status
-htt_qdf_status_map(enum htt_tx_status status)
-{
-	switch (status) {
-	case HTT_TX_COMPL_IND_STAT_OK:
-		return QDF_TX_RX_STATUS_OK;
-	case HTT_TX_COMPL_IND_STAT_DISCARD:
-		return QDF_TX_RX_STATUS_FW_DISCARD;
-	case HTT_TX_COMPL_IND_STAT_NO_ACK:
-		return QDF_TX_RX_STATUS_NO_ACK;
-	case HTT_TX_COMPL_IND_STAT_DROP:
-		return QDF_TX_RX_STATUS_DROP;
-	case HTT_HOST_ONLY_STATUS_CODE_START:
-		return QDF_TX_RX_STATUS_DROP;
-	default:
-		return QDF_TX_RX_STATUS_DROP;
-	}
-}
-
-static inline void
-ol_tx_send_pktlog(struct ol_txrx_soc_t *soc, ol_txrx_pdev_handle pdev,
-		  struct ol_tx_desc_t *tx_desc, qdf_nbuf_t netbuf,
-		  enum htt_tx_status status, enum qdf_pkt_type pkt_type)
-{
-	ol_txrx_pktdump_cb packetdump_cb;
-	enum qdf_dp_tx_rx_status tx_status;
-
-	if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
-		packetdump_cb = pdev->ol_tx_packetdump_cb;
-		if (packetdump_cb) {
-			tx_status = htt_qdf_status_map(status);
-			packetdump_cb((void *)soc, pdev->id,
-				      tx_desc->vdev_id,
-				      netbuf, tx_status, pkt_type);
-		}
-	}
-}
-#else
-static inline void
-ol_tx_send_pktlog(struct ol_txrx_soc_t *soc, ol_txrx_pdev_handle pdev,
-		  struct ol_tx_desc_t *tx_desc, qdf_nbuf_t netbuf,
-		  enum htt_tx_status status, enum qdf_pkt_type pkt_type)
-{
-}
-#endif
-
 /**
  * WARNING: ol_tx_inspect_handler()'s behavior is similar to that of
  * ol_tx_completion_handler().
@@ -1022,6 +972,9 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 	struct ol_tx_desc_t *tx_desc;
 	uint32_t byte_cnt = 0;
 	qdf_nbuf_t netbuf;
+#if !defined(REMOVE_PKT_LOG)
+	ol_txrx_pktdump_cb packetdump_cb;
+#endif
 	struct ol_txrx_soc_t *soc = cds_get_context(QDF_MODULE_ID_SOC);
 	uint32_t is_tx_desc_freed = 0;
 	struct htt_tx_compl_ind_append_tx_tstamp *txtstamp_list = NULL;
@@ -1044,9 +997,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 	tid = HTT_TX_COMPL_IND_TID_GET(*msg_word);
 
 	ol_tx_delay_compute(pdev, status, desc_ids, num_msdus);
-	if (status == htt_tx_status_ok ||
-	    status == htt_tx_status_discard ||
-	    status == htt_tx_status_no_ack) {
+	if (status == htt_tx_status_ok) {
 		txtstamp_list = ol_tx_get_txtstamps(
 			msg_word_header, &msg_word_payload, num_msdus);
 		if (pdev->enable_tx_compl_tsf64)
@@ -1080,9 +1031,9 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 			(u_int64_t)txtstamp64_list[i].tx_tsf64_high << 32 |
 			txtstamp64_list[i].tx_tsf64_low;
 
-			ol_tx_timestamp(pdev, status, netbuf, tx_tsf64);
+			ol_tx_timestamp(pdev, netbuf, tx_tsf64);
 		} else if (txtstamp_list)
-			ol_tx_timestamp(pdev, status, netbuf,
+			ol_tx_timestamp(pdev, netbuf,
 					(u_int64_t)txtstamp_list->timestamp[i]
 					);
 
@@ -1105,9 +1056,15 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 						status);
 		ol_tx_update_ack_count(tx_desc, status);
 
-		ol_tx_send_pktlog(soc, pdev, tx_desc, netbuf, status,
-				  QDF_TX_DATA_PKT);
-
+#if !defined(REMOVE_PKT_LOG)
+		if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
+			packetdump_cb = pdev->ol_tx_packetdump_cb;
+			if (packetdump_cb)
+				packetdump_cb((void *)soc, pdev->id,
+					      tx_desc->vdev_id,
+					      netbuf, status, TX_DATA_PKT);
+		}
+#endif
 		dp_status = ol_tx_comp_hw_to_qdf_status(status);
 
 		DPTRACE(qdf_dp_trace_ptr(netbuf,
@@ -1343,7 +1300,10 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 {
 	struct ol_tx_desc_t *tx_desc;
 	qdf_nbuf_t netbuf;
+#if !defined(REMOVE_PKT_LOG)
+	ol_txrx_pktdump_cb packetdump_cb;
 	void *soc = cds_get_context(QDF_MODULE_ID_SOC);
+#endif
 
 	tx_desc = ol_tx_desc_find_check(pdev, tx_desc_id);
 	if (!tx_desc) {
@@ -1358,7 +1318,12 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 	/* Do one shot statistics */
 	TXRX_STATS_UPDATE_TX_STATS(pdev, status, 1, qdf_nbuf_len(netbuf));
 
-	ol_tx_send_pktlog(soc, pdev, tx_desc, netbuf, status, QDF_TX_MGMT_PKT);
+#if !defined(REMOVE_PKT_LOG)
+	packetdump_cb = pdev->ol_tx_packetdump_cb;
+	if (packetdump_cb)
+		packetdump_cb(soc, pdev->id, tx_desc->vdev_id,
+			      netbuf, status, TX_MGMT_PKT);
+#endif
 
 	if (OL_TX_DESC_NO_REFS(tx_desc)) {
 		ol_tx_desc_frame_free_nonstd(pdev, tx_desc,

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -721,7 +721,7 @@ uint16_t csr_check_concurrent_channel_overlap(struct mac_context *mac_ctx,
 			status =
 				policy_mgr_get_sap_mandatory_channel(
 					mac_ctx->psoc, sap_ch_freq,
-					&intf_ch_freq, vdev_id);
+					&intf_ch_freq);
 			if (QDF_IS_STATUS_ERROR(status))
 				sme_err("no mandatory channel");
 		}
@@ -907,12 +907,12 @@ uint32_t csr_translate_to_wni_cfg_dot11_mode(struct mac_context *mac,
 			ret = MLME_DOT11_MODE_11N;
 		break;
 #endif
-	case eCSR_CFG_DOT11_MODE_ABG:
-		ret = MLME_DOT11_MODE_ABG;
-		break;
 	default:
 		sme_warn("doesn't expect %d as csrDo11Mode", csrDot11Mode);
-		ret = MLME_DOT11_MODE_ALL;
+		if (BAND_2G == mac->mlme_cfg->gen.band)
+			ret = MLME_DOT11_MODE_11G;
+		else
+			ret = MLME_DOT11_MODE_11A;
 		break;
 	}
 
@@ -1236,11 +1236,6 @@ QDF_STATUS csr_set_modify_profile_fields(struct mac_context *mac,
 {
 	struct csr_roam_session *pSession = CSR_GET_SESSION(mac, sessionId);
 
-	if (!pSession) {
-		sme_err("Session_id invalid %d", sessionId);
-		return QDF_STATUS_E_INVAL;
-	}
-
 	qdf_mem_copy(&pSession->modifyProfileFields,
 		     pModifyProfileFields, sizeof(tCsrRoamModifyProfileFields));
 
@@ -1423,7 +1418,6 @@ enum csr_cfgdot11mode csr_phy_mode_to_dot11mode(enum wlan_phymode phy_mode)
 	case WLAN_PHYMODE_11BEA_EHT80:
 	case WLAN_PHYMODE_11BEG_EHT80:
 	case WLAN_PHYMODE_11BEA_EHT160:
-	case WLAN_PHYMODE_11BEA_EHT320:
 		return eCSR_CFG_DOT11_MODE_11BE;
 #endif
 	default:

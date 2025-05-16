@@ -306,29 +306,13 @@ wlan_connectivity_mgmt_event(struct wlan_frame_hdr *mac_hdr,
 			     enum qdf_dp_tx_rx_status tx_status,
 			     int8_t peer_rssi,
 			     uint8_t auth_algo, uint8_t auth_type,
-			     uint8_t auth_seq, enum wlan_main_tag tag)
+			     uint8_t auth_seq, uint16_t aid,
+			     enum wlan_main_tag tag)
 {
 	struct wlan_log_record *new_rec;
 	struct wlan_objmgr_vdev *vdev;
 	bool is_initial_connection = false;
 	bool is_auth_frame_caching_required = false;
-	enum QDF_OPMODE opmode;
-
-	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(global_cl.psoc, vdev_id,
-						    WLAN_MLME_OBJMGR_ID);
-	if (!vdev) {
-		logging_debug("Unable to find vdev:%d", vdev_id);
-		return;
-	}
-
-	opmode = wlan_vdev_mlme_get_opmode(vdev);
-	if (opmode != QDF_STA_MODE && opmode != QDF_P2P_CLIENT_MODE) {
-		wlan_objmgr_vdev_release_ref(vdev, WLAN_MLME_OBJMGR_ID);
-		return;
-	}
-
-	is_initial_connection = wlan_cm_is_vdev_connecting(vdev);
-	wlan_objmgr_vdev_release_ref(vdev, WLAN_MLME_OBJMGR_ID);
 
 	new_rec = qdf_mem_malloc(sizeof(*new_rec));
 	if (!new_rec)
@@ -349,8 +333,19 @@ wlan_connectivity_mgmt_event(struct wlan_frame_hdr *mac_hdr,
 	new_rec->pkt_info.auth_algo = auth_algo;
 	new_rec->pkt_info.auth_type = auth_type;
 	new_rec->pkt_info.auth_seq_num = auth_seq;
+	new_rec->pkt_info.assoc_id = aid;
 	new_rec->pkt_info.is_retry_frame =
 		(mac_hdr->i_fc[1] & IEEE80211_FC1_RETRY);
+
+	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(global_cl.psoc, vdev_id,
+						    WLAN_MLME_OBJMGR_ID);
+	if (vdev) {
+		is_initial_connection = wlan_cm_is_vdev_connecting(vdev);
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_MLME_OBJMGR_ID);
+	} else {
+		logging_debug("Unable to find vdev:%d", vdev_id);
+		goto err;
+	}
 
 	if (global_cl.psoc)
 		is_auth_frame_caching_required =
@@ -367,7 +362,7 @@ wlan_connectivity_mgmt_event(struct wlan_frame_hdr *mac_hdr,
 	} else {
 		wlan_connectivity_log_enqueue(new_rec);
 	}
-
+err:
 	qdf_mem_free(new_rec);
 }
 
