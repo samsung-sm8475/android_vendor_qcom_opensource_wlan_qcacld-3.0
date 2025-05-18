@@ -1148,7 +1148,7 @@ wlan_mlo_sta_mlo_concurency_set_link(struct wlan_objmgr_vdev *vdev,
 QDF_STATUS wlan_mlme_get_mac_vdev_id(struct wlan_objmgr_pdev *pdev,
 				     uint8_t vdev_id,
 				     struct qdf_mac_addr *self_mac);
-#endif
+
 #ifdef CONFIG_BAND_6GHZ
 /**
  * wlan_get_tpc_update_required_for_sta() - Get the tpc update required config
@@ -1184,4 +1184,5 @@ wlan_set_tpc_update_required_for_sta(struct wlan_objmgr_vdev *vdev, bool value)
 {
 	return QDF_STATUS_SUCCESS;
 }
+#endif
 #endif
